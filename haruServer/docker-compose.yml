@@ -1,13 +1,15 @@
-# HaruChat Server Docker Compose
+# HaruChat Docker Compose
+# 包含: 后端 API、前端 Web、Nginx 代理
 version: '3.8'
 
 services:
+  # 后端 API 服务
   haruserver:
     build: .
     container_name: haruserver
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     env_file:
       - .env
     healthcheck:
@@ -21,9 +23,33 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # 前端 Web 服务
+  haruweb:
+    build: ../haruWeb
+    container_name: haruweb
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://www.nietaijun.cloud
+    depends_on:
+      - haruserver
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Nginx 反向代理
   nginx:
     image: nginx:alpine
-    container_name: haruserver-nginx
+    container_name: haruchat-nginx
     restart: unless-stopped
     ports:
       - "80:80"
@@ -33,4 +59,8 @@ services:
       - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - haruserver
+      - haruweb
 
+networks:
+  default:
+    name: haruchat-network

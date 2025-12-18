@@ -1,37 +1,81 @@
 #!/bin/bash
-# HaruChat Server 部署脚本
+
+# HaruChat 完整部署脚本
+# 包含: haruServer (后端) + haruWeb (前端) + Nginx (代理)
 
 set -e
 
-echo "🚀 HaruChat Server 部署"
-echo "======================"
+echo "🚀 开始部署 HaruChat..."
 
-# 检查配置
+# 检查 .env 文件
 if [ ! -f .env ]; then
-    echo "❌ 请先配置 .env 文件"
-    echo "   cp env.template.txt .env && nano .env"
+    echo "⚠️  未找到 .env 文件，从模板创建..."
+    cp env.template.txt .env
+    echo "📝 请编辑 .env 文件配置 API Keys"
     exit 1
 fi
 
-if [ ! -d ssl ] || [ ! -f ssl/fullchain.pem ]; then
-    echo "⚠️  SSL 证书未配置，将只启动 API 服务"
-    echo "   请将证书放到 ssl/ 目录"
+# 检查 SSL 证书
+if [ ! -d ssl ] || [ ! -f ssl/fullchain.pem ] || [ ! -f ssl/privkey.pem ]; then
+    echo "⚠️  未找到 SSL 证书，创建 ssl 目录..."
+    mkdir -p ssl
+    echo "📝 请将 SSL 证书放入 ssl 目录:"
+    echo "   - ssl/fullchain.pem"
+    echo "   - ssl/privkey.pem"
     echo ""
-    docker-compose up -d haruserver
-else
-    echo "📦 启动完整服务（含 Nginx）..."
-    docker-compose up -d
+    echo "可使用 certbot 获取免费证书:"
+    echo "   certbot certonly --standalone -d www.nietaijun.cloud"
+    exit 1
 fi
 
-sleep 3
-
-if curl -s http://localhost:8000/health | grep -q "healthy"; then
-    echo ""
-    echo "✅ 部署成功！"
-    echo "📡 API: http://localhost:8000"
-    echo "📡 域名: https://www.nietaijun.cloud"
-else
-    echo "❌ 启动失败"
-    docker-compose logs --tail=20
+# 检查 haruWeb 目录
+if [ ! -d ../haruWeb ]; then
+    echo "❌ 未找到 ../haruWeb 目录"
+    exit 1
 fi
 
+# 停止旧容器
+echo "🛑 停止旧服务..."
+docker-compose down || true
+
+# 构建并启动
+echo "🔨 构建 Docker 镜像..."
+docker-compose build --no-cache
+
+echo "🚀 启动服务..."
+docker-compose up -d
+
+# 等待服务启动
+echo "⏳ 等待服务启动..."
+sleep 10
+
+# 检查服务状态
+echo "📊 服务状态:"
+docker-compose ps
+
+# 测试健康检查
+echo ""
+echo "🔍 健康检查:"
+if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+    echo "✅ 后端 API: 正常"
+else
+    echo "⚠️  后端 API: 可能仍在启动中"
+fi
+
+if curl -s http://localhost:3000 > /dev/null 2>&1; then
+    echo "✅ 前端 Web: 正常"
+else
+    echo "⚠️  前端 Web: 可能仍在启动中"
+fi
+
+echo ""
+echo "✅ 部署完成!"
+echo ""
+echo "📡 访问地址:"
+echo "   - 主页: https://www.nietaijun.cloud"
+echo "   - API:  https://www.nietaijun.cloud/api/"
+echo ""
+echo "📋 常用命令:"
+echo "   查看日志: docker-compose logs -f"
+echo "   重启服务: docker-compose restart"
+echo "   停止服务: docker-compose down"
