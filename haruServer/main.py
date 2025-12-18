@@ -1,6 +1,7 @@
 """
 HaruChat Backend Server
 基于 FastAPI 的 AI 聊天后端服务
+支持用户管理、会话管理、消息存储
 """
 
 import os
@@ -18,6 +19,11 @@ from sse_starlette.sse import EventSourceResponse
 
 # 加载环境变量
 load_dotenv()
+
+# 导入数据库模块
+from database import init_db
+from routes import auth_router, sessions_router, users_router
+
 
 # ============== 配置 ==============
 
@@ -70,12 +76,27 @@ async def get_http_client():
         yield client
 
 
+# ============== 应用生命周期 ==============
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动时初始化数据库
+    print("🚀 HaruChat Server 启动中...")
+    init_db()
+    print("✅ 数据库初始化完成")
+    yield
+    # 关闭时清理
+    print("👋 HaruChat Server 关闭")
+
+
 # ============== FastAPI 应用 ==============
 
 app = FastAPI(
     title="HaruChat API",
-    description="HaruChat 后端 API 服务",
-    version="1.0.0"
+    description="HaruChat 后端 API 服务 - 支持用户管理和对话存储",
+    version="2.0.0",
+    lifespan=lifespan
 )
 
 # CORS 配置
@@ -86,6 +107,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 注册路由
+app.include_router(auth_router)
+app.include_router(users_router)
+app.include_router(sessions_router)
 
 
 # ============== Gemini API ==============
@@ -205,7 +231,7 @@ async def stream_gemini(
                                 text = part.get("text", "")
                                 is_thought = part.get("thought", False)
                                 if text:
-                                    yield f'data: {{"type": "{"thinking" if is_thought else "content"}", "text": {json.dumps(text)}}}\n\n'
+                                    yield f'data: {{"type": "{"thinking" if is_thought else "content"}", "data": {json.dumps(text)}}}\n\n'
                     
                     # Token 使用量
                     if "usageMetadata" in chunk:
@@ -320,19 +346,30 @@ async def stream_openai(
                         delta = chunk["choices"][0].get("delta", {})
                         text = delta.get("content", "")
                         if text:
-                            yield f'data: {{"type": "content", "text": {json.dumps(text)}}}\n\n'
+                            yield f'data: {{"type": "content", "data": {json.dumps(text)}}}\n\n'
                 except json.JSONDecodeError:
                     pass
     
     yield 'data: {"type": "done"}\n\n'
 
 
-# ============== API 路由 ==============
+# ============== 公共 API 路由 ==============
 
 @app.get("/")
 async def root():
+    """根路径"""
+    return {
+        "status": "ok",
+        "service": "HaruChat API",
+        "version": "2.0.0",
+        "features": ["chat", "users", "sessions", "messages"]
+    }
+
+
+@app.get("/health")
+async def health():
     """健康检查"""
-    return {"status": "ok", "service": "HaruChat API"}
+    return {"status": "healthy"}
 
 
 @app.get("/api/models", response_model=dict)
@@ -352,15 +389,18 @@ async def get_models():
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """非流式聊天接口"""
+    """非流式聊天接口（无需登录）"""
+    
+    # 统一转换为小写
+    provider = request.provider.lower()
     
     async with get_http_client() as client:
-        if request.provider == "gemini":
+        if provider == "gemini":
             if not Config.GEMINI_API_KEY:
                 raise HTTPException(status_code=500, detail="Gemini API Key 未配置")
             return await call_gemini(client, request)
         
-        elif request.provider == "openai":
+        elif provider == "openai":
             if not Config.OPENAI_API_KEY:
                 raise HTTPException(status_code=500, detail="OpenAI API Key 未配置")
             return await call_openai(client, request)
@@ -371,18 +411,21 @@ async def chat(request: ChatRequest):
 
 @app.post("/api/chat/stream")
 async def chat_stream(request: ChatRequest):
-    """流式聊天接口"""
+    """流式聊天接口（无需登录）"""
+    
+    # 统一转换为小写
+    provider = request.provider.lower()
     
     async def generate():
         async with get_http_client() as client:
-            if request.provider == "gemini":
+            if provider == "gemini":
                 if not Config.GEMINI_API_KEY:
                     yield 'data: {"error": "Gemini API Key 未配置"}\n\n'
                     return
                 async for chunk in stream_gemini(client, request):
                     yield chunk
             
-            elif request.provider == "openai":
+            elif provider == "openai":
                 if not Config.OPENAI_API_KEY:
                     yield 'data: {"error": "OpenAI API Key 未配置"}\n\n'
                     return
@@ -398,6 +441,7 @@ async def chat_stream(request: ChatRequest):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # 禁用 Nginx 缓冲
         }
     )
 
@@ -412,4 +456,3 @@ if __name__ == "__main__":
         port=8000,
         reload=True
     )
-

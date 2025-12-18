@@ -12,6 +12,8 @@ services:
       - "8000"
     env_file:
       - .env
+    volumes:
+      - haruchat-data:/app/data  # SQLite 数据持久化
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -60,6 +62,10 @@ services:
     depends_on:
       - haruserver
       - haruweb
+
+volumes:
+  haruchat-data:
+    name: haruchat-data
 
 networks:
   default:
