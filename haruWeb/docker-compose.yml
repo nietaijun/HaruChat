@@ -1,0 +1,18 @@
+# HaruWeb Docker Compose
+version: '3.8'
+
+services:
+  haruweb:
+    build: .
+    container_name: haruweb
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - API_URL=https://www.nietaijun.cloud
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+

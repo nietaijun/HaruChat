@@ -1,0 +1,61 @@
+# ============== macOS ==============
+.DS_Store
+*.swp
+*~
+
+# ============== Xcode ==============
+build/
+DerivedData/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# ============== Swift ==============
+.build/
+Packages/
+Package.resolved
+*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+
+# ============== Python ==============
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+.eggs/
+
+# ============== Node.js ==============
+node_modules/
+.next/
+out/
+.npm
+*.tsbuildinfo
+
+# ============== 环境变量 ==============
+.env
+.env.local
+.env.*.local
+
+# ============== SSL 证书 ==============
+haruServer/ssl/
+
+# ============== IDE ==============
+.idea/
+.vscode/
+*.sublime-*
+
+# ============== 日志 ==============
+*.log
+logs/
+
